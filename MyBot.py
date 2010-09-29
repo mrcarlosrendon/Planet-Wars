@@ -7,18 +7,18 @@
 // that currently exist. Inside this function, you issue orders using the
 // pw.IssueOrder() function. For example, to send 10 ships from planet 3 to
 // planet 8, you would say pw.IssueOrder(3, 8, 10).
-//
-// There is already a basic strategy in place here. You can use it as a
-// starting point, or you can throw it out entirely and replace it with your
-// own. Check out the tutorials and articles on the contest website at
-// http://www.ai-contest.com/resources.
 """
+
+# myProduction = sum(my_planets.growthrate*
+# Each turn: Maximize, (myProduction - enemiesProduction)
+
+
 
 from PlanetWars import PlanetWars
 
 def DoTurn(pw):
-  # (1) If we currently have a fleet in flight, just do nothing.
-  if len(pw.MyFleets()) >= 1:
+  # (1) Limit fleets based on number of planets
+  if len(pw.MyFleets()) >= 1*len(pw.MyPlanets()):
     return
   # (2) Find my strongest planet.
   source = -1
@@ -26,18 +26,21 @@ def DoTurn(pw):
   source_num_ships = 0
   my_planets = pw.MyPlanets()
   for p in my_planets:
-    score = float(p.NumShips())
+    score = float(p.NumShips() + (1.0/p.GrowthRate()))
     if score > source_score:
       source_score = score
       source = p.PlanetID()
       source_num_ships = p.NumShips()
 
-  # (3) Find the weakest enemy or neutral planet.
+  # (3) Find the weakest enemy planet.
   dest = -1
   dest_score = -999999.0
   not_my_planets = pw.NotMyPlanets()
   for p in not_my_planets:
-    score = 1.0 / (1 + p.NumShips())
+    score = (1.0 + p.GrowthRate()) / p.NumShips()
+    # boost score to make more aggressive
+    if p.Owner() == 1:      
+      score = (1+.50)*score
     if score > dest_score:
       dest_score = score
       dest = p.PlanetID()
