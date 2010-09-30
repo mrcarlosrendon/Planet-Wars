@@ -9,57 +9,89 @@
 // planet 8, you would say pw.IssueOrder(3, 8, 10).
 """
 
-# myProduction = sum(my_planets.growthrate*
-# Each turn: Maximize, (myProduction - enemiesProduction)
+import logging
+from os import remove
+LOG_FILENAME = 'mybot.log'
+remove(LOG_FILENAME)
+logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG,format='%(asctime)s %(message)s')
 
-
-
+from math import ceil
 from PlanetWars import PlanetWars
 
+def debug(message):
+  logging.debug(message)
+
+def BreakEvenTurns(planet, fleetDistance):
+  """Returns number of turns it will take to break even on
+  taking this planet.
+  """
+  if planet.GrowthRate() == 0:
+    return 10000
+  return ceil(FleetRequiredToTake(planet, fleetDistance) + \
+         planet.NumShips() / float(planet.GrowthRate()))  
+
+def FleetRequiredToTake(planet, fleetDistance):
+  """Returns the exact size of a fleet required to take the given
+  planet, assuming no other fleets are sent there  
+  """
+  # TODO: take into accounts fleets already headed to the planet
+  if planet.Owner() == 0: #neutral
+    return planet.NumShips()
+  else:
+    return planet.NumShips() + planet.GrowthRate()*fleetDistance  
+
+def DefenseRequired(pw, planet, enemies):
+  defense = 0
+  rate = planet.GrowthRate()
+  size = planet.NumShips()
+  for enemy in enemies:
+    defense += enemy.NumShips() - \
+               rate*pw.Distance(enemy, planet)
+  defense = ceil(defense)
+  debug("DefenseRequired planet " + str(planet.PlanetID()) + " " + str(defense))
+  return defense
+
 def DoTurn(pw):
-  # (1) Limit fleets based on number of planets
-  if len(pw.MyFleets()) >= 1*len(pw.MyPlanets()):
-    return
-  # (2) Find my strongest planet.
-  source = -1
-  source_score = -999999.0
-  source_num_ships = 0
-  my_planets = pw.MyPlanets()
-  for p in my_planets:
-    score = float(p.NumShips() + (1.0/p.GrowthRate()))
-    if score > source_score:
-      source_score = score
-      source = p.PlanetID()
-      source_num_ships = p.NumShips()
 
-  # (3) Find the weakest enemy planet.
-  dest = -1
-  dest_score = -999999.0
-  not_my_planets = pw.NotMyPlanets()
-  for p in not_my_planets:
-    score = (1.0 + p.GrowthRate()) / p.NumShips()
-    # boost score to make more aggressive
-    if p.Owner() == 1:      
-      score = (1+.50)*score
-    if score > dest_score:
-      dest_score = score
-      dest = p.PlanetID()
+  defendedPlanets = []
+  vulnerablePlanets = []
+  enemyPlanets = pw.EnemyPlanets()
+  neutralPlanets = pw.NeutralPlanets()
 
-  # (4) Send half the ships from my strongest planet to the weakest
-  # planet that I do not own.
-  if source >= 0 and dest >= 0:
-    num_ships = source_num_ships / 2
-    pw.IssueOrder(source, dest, num_ships)
-
+  # Figure out where I have excesss
+  debug("status")
+  for p in pw.MyPlanets():
+    if p.NumShips() > .5*DefenseRequired(pw, p, enemyPlanets):
+      defendedPlanets.append(p)
+    else:
+      vulnerablePlanets.append(p)
+      
+  # Look for a good bargin
+  debug("looking for bargins")
+  for taker in defendedPlanets:
+    debug(str(taker.PlanetID()))
+    for p in neutralPlanets:
+      dist = pw.Distance(p, taker)
+      if BreakEvenTurns(p, dist) < 20:        
+        attackFleetSize = FleetRequiredToTake(p, dist) + 10
+        if taker.NumShips() > attackFleetSize: 
+          logging.debug(str(taker.PlanetID()) + " sent " + str(attackFleetSize) + \
+                        " to " + str(p.PlanetID()))
+          pw.IssueOrder(taker, p, attackFleetSize)
+          taker.NumShips(taker.NumShips()-attackFleetSize)
+          break
 
 def main():
+  debug("starting")
   map_data = ''
   while(True):
     current_line = raw_input()
     if len(current_line) >= 2 and current_line.startswith("go"):
       pw = PlanetWars(map_data)
+      debug("NEW TURN")
       DoTurn(pw)
       pw.FinishTurn()
+      debug("TURN FINISHED")
       map_data = ''
     else:
       map_data += current_line + '\n'
