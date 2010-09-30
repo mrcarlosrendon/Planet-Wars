@@ -156,15 +156,15 @@ class PlanetWars:
     return s
 
   def Distance(self, source_planet, destination_planet):
-    source = self._planets[source_planet]
-    destination = self._planets[destination_planet]
+    source = self._planets[source_planet.PlanetID()]
+    destination = self._planets[destination_planet.PlanetID()]
     dx = source.X() - destination.X()
     dy = source.Y() - destination.Y()
     return int(ceil(sqrt(dx * dx + dy * dy)))
 
   def IssueOrder(self, source_planet, destination_planet, num_ships):
     stdout.write("%d %d %d\n" % \
-     (source_planet, destination_planet, num_ships))
+     (source_planet.PlanetID(), destination_planet.PlanetID(), num_ships))
     stdout.flush()
 
   def IsAlive(self, player_id):
