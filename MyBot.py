@@ -9,14 +9,16 @@
 // planet 8, you would say pw.IssueOrder(3, 8, 10).
 """
 
-import logging
-from os import remove
-LOG_FILENAME = 'mybot.log'
-remove(LOG_FILENAME)
-logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG,format='%(asctime)s %(message)s')
-
-from math import ceil
 from PlanetWars import PlanetWars
+from math import ceil
+from os import remove
+from os.path import isfile
+import logging
+
+BOT_LOG_FILENAME = 'mybot.log'
+if isfile(BOT_LOG_FILENAME):
+  remove(BOT_LOG_FILENAME)
+logging.basicConfig(filename=BOT_LOG_FILENAME,level=logging.DEBUG,format='%(asctime)s %(message)s')
 
 def debug(message):
   logging.debug(message)
@@ -52,11 +54,12 @@ def DefenseRequired(pw, planet, enemies):
   return defense
 
 def DoTurn(pw):
-
   defendedPlanets = []
   vulnerablePlanets = []
   enemyPlanets = pw.EnemyPlanets()
   neutralPlanets = pw.NeutralPlanets()
+  myFleets = pw.MyFleets()
+  enemyFleets = pw.EnemyFleets()
 
   # Figure out where I have excesss
   debug("status")
@@ -68,18 +71,29 @@ def DoTurn(pw):
       
   # Look for a good bargin
   debug("looking for bargins")
+  attackedPlanets = []
+  for f in myFleets:
+    attackedPlanets.append(f.DestinationPlanet())
+  if len(defendedPlanets)==0:
+    debug("no defense, might as well attack")
+    defendedPlanets = vulnerablePlanets
   for taker in defendedPlanets:
     debug(str(taker.PlanetID()))
-    for p in neutralPlanets:
+    for p in enemyPlanets+neutralPlanets:
+      if attackedPlanets.count(p.PlanetID()) > 0:
+        continue
       dist = pw.Distance(p, taker)
-      if BreakEvenTurns(p, dist) < 20:        
-        attackFleetSize = FleetRequiredToTake(p, dist) + 10
-        if taker.NumShips() > attackFleetSize: 
+      if BreakEvenTurns(p, dist) < 50:        
+        attackFleetSize = FleetRequiredToTake(p, dist) + ceil(.25*DefenseRequired(pw, p, enemyPlanets))
+        if attackFleetSize > 0 and taker.NumShips() > attackFleetSize: 
           logging.debug(str(taker.PlanetID()) + " sent " + str(attackFleetSize) + \
                         " to " + str(p.PlanetID()))
           pw.IssueOrder(taker, p, attackFleetSize)
           taker.NumShips(taker.NumShips()-attackFleetSize)
+          attackedPlanets.append(p.PlanetID())
           break
+        else:
+          debug("not enough ships")
 
 def main():
   debug("starting")

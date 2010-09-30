@@ -4,6 +4,12 @@
 from math import ceil, sqrt
 from sys import stdout
 
+from os import remove
+from os.path import isfile
+GAME_LOG_FILENAME = 'game.log'
+if isfile(GAME_LOG_FILENAME):
+  remove(GAME_LOG_FILENAME)
+log = open(GAME_LOG_FILENAME, 'w')
 
 class Fleet:
   def __init__(self, owner, num_ships, source_planet, destination_planet, \
@@ -177,6 +183,9 @@ class PlanetWars:
     return False
 
   def ParseGameState(self, s):
+    log.write(s)
+    log.write("go\n")
+    log.flush()
     self._planets = []
     self._fleets = []
     lines = s.split("\n")
