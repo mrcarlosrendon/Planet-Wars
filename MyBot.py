@@ -50,25 +50,36 @@ def FleetRequiredToTake(pw, planet, fleetDistance):
     required += int(ceil(planet.GrowthRate()*fleetDistance + 1))    
   return required
 
-def DefenseRequired(pw, planet, enemies):
+def GeneralDefenseRequired(pw, planet, enemies):
+  """How many reserves do I need to leave if they send everything at me?"""
   defense = 0
   rate = planet.GrowthRate()
-  size = planet.NumShips()
+  for enemy in enemies:
+    defense += enemy.NumShips() - \
+               rate*pw.Distance(enemy, planet)
+  defense = int(ceil(defense))
+  debug("GeneralDefenseRequired planet " + str(planet.PlanetID()) + " " + str(defense))
+  return defense
+
+def DefenseRequiredForIncoming(pw, planet):
+  """How many reserves do I need to leave to protect me from the
+  incoming waves?"""
+  defense = 0
+  rate = planet.GrowthRate()
   for f in pw.EnemyFleets():
     if f.DestinationPlanet() == planet.PlanetID():
       adj = f.NumShips() - int(ceil(rate*f.TurnsRemaining()))
       if adj > 0:
-        defense += adj 
+        defense += adj
+  # TODO, take into account incoming reinforcements
   #for f in pw.MyFleets():
   #  if f.DestinationPlanet() == planet.PlanetID():
   #    adj = f.NumShips() - int(ceil(rate*f.TurnsRemaining()))
   #    if adj > 0:
   #      defense -= adj
-  for enemy in enemies:
-    defense += enemy.NumShips() - \
-               rate*pw.Distance(enemy, planet)
   defense = int(ceil(defense))
-  debug("DefenseRequired planet " + str(planet.PlanetID()) + " " + str(defense))
+  if defense != 0:
+    debug("DefenseRequiredForIncoming planet " + str(planet.PlanetID()) + " " + str(defense))
   return defense
 
 def DoTurn(pw):
@@ -85,7 +96,8 @@ def DoTurn(pw):
   debug("status")
   for p in pw.MyPlanets():
     mySize = mySize + p.NumShips()
-    if p.NumShips() > .5*DefenseRequired(pw, p, enemyPlanets):
+    if p.NumShips() > DefenseRequiredForIncoming(pw, p) and \
+           p.NumShips() > .5*GeneralDefenseRequired(pw, p, enemyPlanets):
       defendedPlanets.append(p)
     else:
       vulnerablePlanets.append(p)
@@ -106,7 +118,7 @@ def DoTurn(pw):
     for p in enemyPlanets:
       alreadySent = 0
       for mp in pw.MyPlanets():
-        defenseReq = int(ceil(.05*DefenseRequired(pw, mp, enemyPlanets)))
+        defenseReq = max(DefenseRequiredForIncoming(pw,mp), int(ceil(.05*GeneralDefenseRequired(pw, mp, enemyPlanets))))
         toSend = mp.NumShips()
         # Don't put youtself at too much risk
         if defenseReq > 0:
@@ -142,7 +154,7 @@ def DoTurn(pw):
         continue
       dist = pw.Distance(p, taker)
       if BreakEvenTurns(pw, p, dist) < 50:
-        defenseReq = int(ceil(.25*DefenseRequired(pw, p, enemyPlanets)))
+        defenseReq = max(DefenseRequiredForIncoming(pw, p), int(ceil(.25*GeneralDefenseRequired(pw, p, enemyPlanets))))
         attackFleetSize = FleetRequiredToTake(pw, p, dist)
         if defenseReq > 0:
           attackFleetSize = attackFleetSize + defenseReq
