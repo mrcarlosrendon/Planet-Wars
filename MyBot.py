@@ -11,17 +11,7 @@
 
 from PlanetWars import PlanetWars
 from math import ceil
-from os import remove
-from os.path import isfile
-import logging
-
-BOT_LOG_FILENAME = 'mybot.log'
-if isfile(BOT_LOG_FILENAME):
-  remove(BOT_LOG_FILENAME)
-logging.basicConfig(filename=BOT_LOG_FILENAME,level=logging.DEBUG,format='%(asctime)s %(message)s')
-
-def debug(message):
-  logging.debug(message)
+from Log import debug
 
 def BreakEvenTurns(pw, planet, fleetDistance):
   """Returns number of turns it will take to break even on
@@ -132,10 +122,10 @@ def DoTurn(pw):
           toSend = 0
         if toSend > 0 and mp.NumShips() - toSend > 0:          
           pw.IssueOrder(mp, p, toSend)
-          logging.debug(str(mp.PlanetID()) + " sent " + str(toSend) + \
+          debug(str(mp.PlanetID()) + " sent " + str(toSend) + \
                         " to " + str(p.PlanetID()))
           mp.NumShips(mp.NumShips()-toSend)
-          logging.debug(str(mp.NumShips()) + " left")
+          debug(str(mp.NumShips()) + " left")
           alreadySent += toSend
     return
       
@@ -159,7 +149,7 @@ def DoTurn(pw):
         if defenseReq > 0:
           attackFleetSize = attackFleetSize + defenseReq
         if attackFleetSize > 0 and taker.NumShips() > attackFleetSize: 
-          logging.debug(str(taker.PlanetID()) + " sent " + str(attackFleetSize) + \
+          debug(str(taker.PlanetID()) + " sent " + str(attackFleetSize) + \
                         " to " + str(p.PlanetID()))
           pw.IssueOrder(taker, p, attackFleetSize)
           taker.NumShips(taker.NumShips()-attackFleetSize)
