@@ -23,29 +23,47 @@ logging.basicConfig(filename=BOT_LOG_FILENAME,level=logging.DEBUG,format='%(asct
 def debug(message):
   logging.debug(message)
 
-def BreakEvenTurns(planet, fleetDistance):
+def BreakEvenTurns(pw, planet, fleetDistance):
   """Returns number of turns it will take to break even on
   taking this planet.
   """
   if planet.GrowthRate() == 0:
+    debug("wtf, ZERO GROWTH")
     return 10000
-  return int(ceil(FleetRequiredToTake(planet, fleetDistance) + \
+  return int(ceil(FleetRequiredToTake(pw, planet, fleetDistance) + \
          planet.NumShips() / float(planet.GrowthRate())))
 
-def FleetRequiredToTake(planet, fleetDistance):
+def FleetRequiredToTake(pw, planet, fleetDistance):
   """Returns the exact size of a fleet required to take the given
-  planet, assuming no other fleets are sent there  
+  planet.
   """
-  # TODO: take into accounts fleets already headed to the planet
-  if planet.Owner() == 0: #neutral
-    return planet.NumShips() + 1
-  else:
-    return int(ceil(planet.NumShips() + planet.GrowthRate()*fleetDistance + 1))
+  # take into accounts fleets already headed to the planet
+  required = planet.NumShips() + 1
+  for f in pw.Fleets():
+    if f.DestinationPlanet() == planet.PlanetID():
+      adj = f.NumShips() - int(ceil(planet.GrowthRate()*f.TurnsRemaining()))
+      if f.Owner == 2 and adj > 0: # enemy
+        required += adj
+      if f.Owner == 1 and adj < 0: # mine
+        required -= adj            
+  if planet.Owner() == 2: # enemy 
+    required += int(ceil(planet.GrowthRate()*fleetDistance + 1))    
+  return required
 
 def DefenseRequired(pw, planet, enemies):
   defense = 0
   rate = planet.GrowthRate()
   size = planet.NumShips()
+  for f in pw.EnemyFleets():
+    if f.DestinationPlanet() == planet.PlanetID():
+      adj = f.NumShips() - int(ceil(rate*f.TurnsRemaining()))
+      if adj > 0:
+        defense += adj 
+  #for f in pw.MyFleets():
+  #  if f.DestinationPlanet() == planet.PlanetID():
+  #    adj = f.NumShips() - int(ceil(rate*f.TurnsRemaining()))
+  #    if adj > 0:
+  #      defense -= adj
   for enemy in enemies:
     defense += enemy.NumShips() - \
                rate*pw.Distance(enemy, planet)
@@ -86,18 +104,27 @@ def DoTurn(pw):
   if winRatio > 1.5:
     debug("Kill Kill Kill!!!!")
     for p in enemyPlanets:
-      required = FleetRequiredToTake(p, 100) # TODO fudging here for now
+      alreadySent = 0
       for mp in pw.MyPlanets():
-        if required > 0:
-          defenseReq = int(ceil(.05*DefenseRequired(pw, mp, enemyPlanets)))
-          toSend = mp.NumShips() - defenseReq
-          if toSend > 0 and mp.NumShips() - toSend > 0:          
-            pw.IssueOrder(mp, p, toSend)
-            logging.debug(str(mp.PlanetID()) + " sent " + str(toSend) + \
-                          " to " + str(p.PlanetID()))
-            mp.NumShips(mp.NumShips()-toSend)
-            logging.debug(str(mp.NumShips()) + " left")
-            required = required - toSend
+        defenseReq = int(ceil(.05*DefenseRequired(pw, mp, enemyPlanets)))
+        toSend = mp.NumShips()
+        # Don't put youtself at too much risk
+        if defenseReq > 0:
+          toSend -= defenseReq
+        # Only send enough to kill
+        necToKill = FleetRequiredToTake(pw, p, pw.Distance(mp, p))
+        if necToKill > 0:
+          if necToKill - alreadySent < toSend:
+            toSend = necToKill - alreadySent
+        else:
+          toSend = 0
+        if toSend > 0 and mp.NumShips() - toSend > 0:          
+          pw.IssueOrder(mp, p, toSend)
+          logging.debug(str(mp.PlanetID()) + " sent " + str(toSend) + \
+                        " to " + str(p.PlanetID()))
+          mp.NumShips(mp.NumShips()-toSend)
+          logging.debug(str(mp.NumShips()) + " left")
+          alreadySent += toSend
     return
       
   # Look for a good bargin
@@ -114,9 +141,9 @@ def DoTurn(pw):
       if attackedPlanets.count(p.PlanetID()) > 0:
         continue
       dist = pw.Distance(p, taker)
-      if BreakEvenTurns(p, dist) < 50:
+      if BreakEvenTurns(pw, p, dist) < 50:
         defenseReq = int(ceil(.25*DefenseRequired(pw, p, enemyPlanets)))
-        attackFleetSize = FleetRequiredToTake(p, dist)
+        attackFleetSize = FleetRequiredToTake(pw, p, dist)
         if defenseReq > 0:
           attackFleetSize = attackFleetSize + defenseReq
         if attackFleetSize > 0 and taker.NumShips() > attackFleetSize: 
