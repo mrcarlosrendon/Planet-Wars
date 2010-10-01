@@ -76,7 +76,10 @@ def DoTurn(pw):
   for p in enemyPlanets:
     enemySize = enemySize + p.NumShips()
 
-  winRatio = float(mySize)/enemySize
+  if ( enemySize <= 0 ):
+    winRatio = 0
+  else:
+    winRatio = float(mySize)/enemySize
   debug("Ratio: " + str(winRatio))
 
   # Should I go for the kill?
@@ -86,9 +89,9 @@ def DoTurn(pw):
       required = FleetRequiredToTake(p, 100) # TODO fudging here for now
       for mp in pw.MyPlanets():
         if required > 0:
-          defenseReq = int(ceil(.10*DefenseRequired(pw, mp, enemyPlanets)))
+          defenseReq = int(ceil(.05*DefenseRequired(pw, mp, enemyPlanets)))
           toSend = mp.NumShips() - defenseReq
-          if mp.NumShips() - toSend > 0:          
+          if toSend > 0 and mp.NumShips() - toSend > 0:          
             pw.IssueOrder(mp, p, toSend)
             logging.debug(str(mp.PlanetID()) + " sent " + str(toSend) + \
                           " to " + str(p.PlanetID()))
