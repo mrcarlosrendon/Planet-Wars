@@ -13,6 +13,21 @@ from PlanetWars import PlanetWars
 from math import ceil
 from Log import debug
 
+distances = []
+nearestNeighbors = []
+
+def Distance(p1id, p2id):
+  return distances[p1id][p2id][1]
+
+def ComputePlanetDistances(pw):
+  planets = sorted(pw.Planets(), key=lambda x: x.PlanetID())
+  for p in planets:
+    dists = []
+    for q in planets:
+      dists.append((q.PlanetID(), pw.Distance(p,q)))
+    nearestNeighbors.append(sorted(dists, key=lambda x: x[1]))
+    distances.append(dists)
+
 def BreakEvenTurns(pw, planet, fleetDistance):
   """Returns number of turns it will take to break even on
   taking this planet.
@@ -40,13 +55,16 @@ def FleetRequiredToTake(pw, planet, fleetDistance):
     required += int(ceil(planet.GrowthRate()*fleetDistance + 1))    
   return required
 
-def GeneralDefenseRequired(pw, planet, enemies):
-  """How many reserves do I need to leave if they send everything at me?"""
+def GeneralDefenseRequired(pw, planet):
+  """How many reserves do I need if the nearest enemies send everything"""
   defense = 0
   rate = planet.GrowthRate()
-  for enemy in enemies:
-    defense += enemy.NumShips() - \
-               rate*pw.Distance(enemy, planet)
+  neighbors = nearestNeightbors[planet.PlanetID()]
+  for n in neighbors:
+    # If enemy and can hit me in 15 turns or less
+    p = pw.GetPlanet(n[0])
+    if n[1] < 15 and p.Owner() == 2:
+      defense += p.NumShips() - rate*Distance(n[0], planet.PlanetID())
   defense = int(ceil(defense))
   debug("GeneralDefenseRequired planet " + str(planet.PlanetID()) + " " + str(defense))
   return defense
@@ -61,20 +79,22 @@ def DefenseRequiredForIncoming(pw, planet):
       adj = f.NumShips() - int(ceil(rate*f.TurnsRemaining()))
       if adj > 0:
         defense += adj
-  # TODO, take into account incoming reinforcements
-  #for f in pw.MyFleets():
-  #  if f.DestinationPlanet() == planet.PlanetID():
-  #    adj = f.NumShips() - int(ceil(rate*f.TurnsRemaining()))
-  #    if adj > 0:
-  #      defense -= adj
+  # take into account incoming reinforcements
+  for f in pw.MyFleets():
+    if f.DestinationPlanet() == planet.PlanetID():
+      adj = f.NumShips() - int(ceil(rate*f.TurnsRemaining()))
+      if adj > 0:
+        defense -= adj
   defense = int(ceil(defense))
   if defense != 0:
     debug("DefenseRequiredForIncoming planet " + str(planet.PlanetID()) + " " + str(defense))
   return defense
 
 def DoTurn(pw):
-  defendedPlanets = []
-  vulnerablePlanets = []
+  orders = []
+  urgentPlanets = []
+  myPlanets = []
+  enemyTargets = []
   enemyPlanets = pw.EnemyPlanets()
   neutralPlanets = pw.NeutralPlanets()
   myFleets = pw.MyFleets()
@@ -82,15 +102,20 @@ def DoTurn(pw):
   enemySize = 0
   mySize = 0
 
+  # Interplanetary distances will come in handy
+  if not distances:
+    ComputePlanetDistances(pw)
+
   # How am I doing?
-  debug("status")
+  debug("Status")
   for p in pw.MyPlanets():
     mySize = mySize + p.NumShips()
-    if p.NumShips() > DefenseRequiredForIncoming(pw, p) and \
-           p.NumShips() > .5*GeneralDefenseRequired(pw, p, enemyPlanets):
-      defendedPlanets.append(p)
+    defInc = DefenseRequiredForIncoming(pw, p)
+    # Who needs help urgently, and how much?
+    if p.NumShips() < defInc:
+      urgentPlanets.append((p, defInc))
     else:
-      vulnerablePlanets.append(p)
+      myPlanets.append((p, int(ceil(.75*GeneralDefenseRequired(pw, p)))))
 
   # How is the enemy doing?
   for p in enemyPlanets:
@@ -102,50 +127,52 @@ def DoTurn(pw):
     winRatio = float(mySize)/enemySize
   debug("Ratio: " + str(winRatio))
 
-  # Should I go for the kill?
-  if winRatio > 1.5:
-    debug("Kill Kill Kill!!!!")
-    for p in enemyPlanets:
-      alreadySent = 0
-      for mp in pw.MyPlanets():
-        defenseReq = max(DefenseRequiredForIncoming(pw,mp), int(ceil(.05*GeneralDefenseRequired(pw, mp, enemyPlanets))))
-        toSend = mp.NumShips()
-        # Don't put youtself at too much risk
-        if defenseReq > 0:
-          toSend -= defenseReq
-        # Only send enough to kill
-        necToKill = FleetRequiredToTake(pw, p, pw.Distance(mp, p))
-        if necToKill > 0:
-          if necToKill - alreadySent < toSend:
-            toSend = necToKill - alreadySent
-        else:
-          toSend = 0
-        if toSend > 0 and mp.NumShips() - toSend > 0:          
-          pw.IssueOrder(mp, p, toSend)
-          debug(str(mp.PlanetID()) + " sent " + str(toSend) + \
-                        " to " + str(p.PlanetID()))
-          mp.NumShips(mp.NumShips()-toSend)
-          debug(str(mp.NumShips()) + " left")
-          alreadySent += toSend
-    return
-      
-  # Look for a good bargin
-  debug("looking for bargins")
-  attackedPlanets = []
-  for f in myFleets:
-    attackedPlanets.append(f.DestinationPlanet())
-  if len(defendedPlanets)==0:
-    debug("no defense, might as well attack")
-    defendedPlanets = vulnerablePlanets
-  for taker in defendedPlanets:
-    debug(str(taker.PlanetID()))
+  # Defend myself first
+  debug("Defense")
+  # some urgent planets are more urgent
+  urgentPlanets.sort(key=lambda x: x[0].GrowthRate(), reverse=True)  
+  for helpme in urgentPlanets:
+    needed = helpme[1]
+    helpsofar = 0
+    plannedSend = []
+    # Make a defense plan. Prefer close help
+    for helper in sorted(myPlanets, key=lambda x: Distance(x[0],helpme[0])):
+      # Don't undefend yourself
+      tosend = helper[0].NumShips() - helper[1]
+      if tosend <= 0:
+        continue        
+      # Only send what is needed
+      if tosend > needed:
+        tosend = needed
+      plannedSend.append((helper[0].PlanetID(), helpme[0].PlanetID(), tosend))
+      helpsofar += tosend
+      if helpsofar >= needed:
+        break
+    # issue actual orders
+    if helpsofar >= needed:
+      for p in plannedSend:
+        pw.IssueOrder(p)
+        orders.append(p)
+        sender = pw.GetPlanet(p[0])
+        sender.NumShips(sender.NumShips()-p[2])
+    # else, TODO: this planet is BONED until I fix
+
+  # Maximize investments, Minimize enemy
+  debug("Offense")
+  for taker in myPlanets:
+    debug(str(taker[0].PlanetID()))
+
+    defenseReq = max(DefenseRequiredForIncoming(pw, p), \
+                       int(ceil(.50*GeneralDefenseRequired(pw, p, enemyPlanets))))
+
+    # Figure out what is most valueble for this taker
     for p in enemyPlanets+neutralPlanets:
-      if attackedPlanets.count(p.PlanetID()) > 0:
-        continue
-      dist = pw.Distance(p, taker)
-      if BreakEvenTurns(pw, p, dist) < 50:
-        defenseReq = max(DefenseRequiredForIncoming(pw, p), int(ceil(.25*GeneralDefenseRequired(pw, p, enemyPlanets))))
-        attackFleetSize = FleetRequiredToTake(pw, p, dist)
+      dist = Distance(p.PlanetID(), taker[0].PlanetID())
+      breakEvenTurns = BreakEvenTurns(pw, p, dist)
+      # how to create score from these three parameters?
+      
+
+      
         if defenseReq > 0:
           attackFleetSize = attackFleetSize + defenseReq
         if attackFleetSize > 0 and taker.NumShips() > attackFleetSize: 
