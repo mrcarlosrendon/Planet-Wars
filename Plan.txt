@@ -1,0 +1,24 @@
+General Strategy
+
+1. Don't lose planets
+2. Make ships faster than the enemy
+3. Minimize enemy's ability to make ships
+4. Minimize distance ships are sent 
+5. Always do something (being passive isn't going to cut it)
+
+Things I need to know
+
+1. How much defense is required at each planet to not get taken?
+2. How much ships do I have extra?
+3. The cost/value of taking each planet?
+4. Of the planets that I can take, what is the optimal way to take them?
+
+
+
+How to value planets?
+ break even turns? these are relative to each planet
+
+
+Can I turn this into a Linear Program????
+
+
