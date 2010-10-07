@@ -36,6 +36,82 @@ def ComputePlanetDistances(pw):
     nearestNeighbors.append(sorted(dists, key=lambda x: x[1]))
     distances.append(dists)
 
+class PlanetSim:
+    """Useful for predicting the future state of a planet based on
+    incoming fleets"""
+    def __init__(self, startingShips, rate, isNeutral):
+      if isNeutral:        
+        self.startingShips = 0
+        self.neutralShips = startingShips
+      else:
+        self.startingShips = startingShips
+        self.neutralShips = 0        
+      self.rate = rate
+      self.fleets = []
+    def addFleet(self, turn, numShips):
+      self.fleets.append((turn, numShips))
+    def delFleet(self, turn, numShips):
+      self.fleets.remove((turn, numShips))
+    def findMinFleetOwn(self, turn):
+      # what if we do nothing
+      (taken, left) = self.simulate()
+      if taken and left > 0: # nothing bad will happen
+        return 0
+      elif not taken and left > 0: # still neutral, just attack
+        return left + 1
+      currFleetSize = 0
+      while left < 0:
+        currFleetSize += 1
+        self.addFleet(turn, currFleetSize)
+        (taken, left) = self.simulate()
+        self.delFleet(turn, currFleetSize)
+      return currFleetSize
+    def simulate(self):
+      """After all fleets have come in, how many ships does the
+      planet have?"""
+      def reducedFleets():
+        """Reduce the fleets so that if multiple fleets happen on
+        the same turn, there combined effect is reduced to one
+        event"""
+        reduced = []
+        fleets = sorted(self.fleets, key=lambda x: x[0])
+        currTurn = 0
+        reducedValue = 0
+        for e in fleets:
+          if e[0] == currTurn:
+            reducedValue += e[1]
+          else:
+            reduced.append((currTurn,reducedValue))
+            reducedValue = e[1]
+            currTurn = e[0]
+        if reducedValue:
+          reduced.append((currTurn, reducedValue))
+        return reduced
+      currTurn = 0
+      ships = self.startingShips
+      neuShips = self.neutralShips
+      for e in reducedFleets():
+        remain = e[1]
+        if neuShips > 0:
+          if e[1] >= neuShips:
+            remain = neuShips - e[1]
+            neuShips = 0
+          else:
+            neuShips -= e[1]
+            remain = 0
+        if neuShips == 0 and remain:
+          turns = e[0] - currTurn
+          if ships >= 0:
+            ships += self.rate*turns + remain
+          else:
+            ships -= self.rate*turns + remain
+        currTurn = e[0]
+      if neuShips:
+        return (False, neuShips)
+      else:
+        return (True, ships)
+
+
 def BreakEvenTurns(pw, planet, fleetDistance):
   """Returns number of turns it will take to break even on
   taking this planet.
@@ -61,25 +137,13 @@ def FleetRequiredToTake(pw, planet, fleetDistance):
   """Returns the exact size of a fleet required to take the given
   planet.
   """
-  # take into accounts fleets already headed to the planet
-  required = planet.NumShips() + 1
+  sim = PlanetSim(planet.NumShips(), planet.GrowthRate(), planet.Owner()==0)
   for f in pw.Fleets():
     if f.DestinationPlanet() == planet.PlanetID():
-      if planet.Owner() == 0: # if neutral, growth doesn't apply
-        adj = f.NumShips()
-      else:
-        adj = f.NumShips() - \
-              int(ceil(planet.GrowthRate()*f.TurnsRemaining()))
-      if f.Owner() == 2 and adj > 0: # enemy
-        required += adj
-      if f.Owner() == 1 and adj > 0: # mine
-        # adj has to be > 0 because otherwise sending this fleet is
-        # somehow making it harder to take.. that doesn't make sense
-        required -= adj            
-  if planet.Owner() == 2: # enemy 
-    required += int(ceil(planet.GrowthRate()*fleetDistance + 1))
-  #debug(str(required) + " required to take " + str(planet.PlanetID()))
-  return required
+      sim.addFleet(f.TurnsRemaining(),f.NumShips())
+  minFleet = sim.findMinFleetOwn(fleetDistance)
+  debug(str(minFleet) + " required to take " + str(planet.PlanetID()))
+  return minFleet
 
 def GeneralDefenseRequired(pw, planet):
   """How many reserves do I need if the nearest enemies send everything"""
@@ -98,31 +162,13 @@ def GeneralDefenseRequired(pw, planet):
 def DefenseRequiredForIncoming(pw, planet):
   """How many reserves do I need to leave to protect me from the
   incoming waves?"""
-
-
-
-
-  # I NEED HELP - THIS IS OBVIOUSLY BROKEN
-
-
-  
-  defense = 0
-  rate = planet.GrowthRate()
-  for f in pw.EnemyFleets():
+  sim = PlanetSim(planet.NumShips(), planet.GrowthRate(), planet.Owner()==0)
+  for f in pw.Fleets():
     if f.DestinationPlanet() == planet.PlanetID():
-      adj = f.NumShips() - int(ceil(rate*f.TurnsRemaining()))
-      if adj > 0:
-        defense += adj
-  # take into account incoming reinforcements
-  for f in pw.MyFleets():
-    if f.DestinationPlanet() == planet.PlanetID():
-      adj = f.NumShips() - int(ceil(rate*f.TurnsRemaining()))
-      if adj > 0:
-        defense -= adj
-  defense = int(ceil(defense))
-  if defense != 0:
-    debug("DefenseRequiredForIncoming planet " + str(planet.PlanetID()) + " " + str(defense))
-  return defense
+      sim.addFleet(f.TurnsRemaining(),f.NumShips())
+  required = sim.findMinFleetOwn(0)
+  debug(str(required) + " required to defend " + str(planet.PlanetID()) + " from incoming ")
+  return required
 
 def DoTurn(pw):
   orders = []
