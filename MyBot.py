@@ -56,6 +56,7 @@ class PlanetSim:
       # what if we do nothing
       (taken, left) = self.simulate()
       if taken and left > 0: # nothing bad will happen
+        debug("did nothing")
         return 0
       elif not taken and left > 0: # still neutral, just attack
         return left + 1
@@ -63,8 +64,11 @@ class PlanetSim:
       while left < 0:
         currFleetSize += 1
         self.addFleet(turn, currFleetSize)
-        (taken, left) = self.simulate()
+        (taken, left) = self.simulate()        
+        debug("currfleet: " + str(currFleetSize) +  " taken: " + str(taken) + " left: " + str(left))
         self.delFleet(turn, currFleetSize)
+        if taken:
+          break
       return currFleetSize
     def simulate(self):
       """After all fleets have come in, how many ships does the
@@ -90,6 +94,7 @@ class PlanetSim:
       currTurn = 0
       ships = self.startingShips
       neuShips = self.neutralShips
+# TODO, this part needs work still
       for e in reducedFleets():
         remain = e[1]
         if neuShips > 0:
@@ -102,9 +107,9 @@ class PlanetSim:
         if neuShips == 0 and remain:
           turns = e[0] - currTurn
           if ships >= 0:
-            ships += self.rate*turns + remain
+            ships += self.rate*turns + remain            
           else:
-            ships -= self.rate*turns + remain
+            ships -= self.rate*turns + remain            
         currTurn = e[0]
       if neuShips:
         return (False, neuShips)
@@ -117,12 +122,12 @@ def BreakEvenTurns(pw, planet, fleetDistance):
   taking this planet.
   """
   if planet.GrowthRate() == 0:
-    debug("wtf, ZERO GROWTH on " + str(planet.PlanetID()))
+#    debug("wtf, ZERO GROWTH on " + str(planet.PlanetID()))
     return 100000
   cost = FleetRequiredToTake(pw, planet, fleetDistance)
   # if it is already being taken, then we won't break even
   if cost <= 0:
-    debug(str(planet.PlanetID()) + " already being taken")
+#    debug(str(planet.PlanetID()) + " already being taken")
     return 100000
   if planet.Owner() == 2:
     # enemy planets pay back in half the time
@@ -156,7 +161,7 @@ def GeneralDefenseRequired(pw, planet):
     if n[1] < 15 and p.Owner() == 2:
       defense += p.NumShips() - rate*Distance(n[0], planet.PlanetID())
   defense = int(ceil(defense))
-  debug("GeneralDefenseRequired planet " + str(planet.PlanetID()) + " " + str(defense))
+#  debug("GeneralDefenseRequired planet " + str(planet.PlanetID()) + " " + str(defense))
   return defense
 
 def DefenseRequiredForIncoming(pw, planet):
@@ -167,7 +172,7 @@ def DefenseRequiredForIncoming(pw, planet):
     if f.DestinationPlanet() == planet.PlanetID():
       sim.addFleet(f.TurnsRemaining(),f.NumShips())
   required = sim.findMinFleetOwn(0)
-  debug(str(required) + " required to defend " + str(planet.PlanetID()) + " from incoming ")
+#  debug(str(required) + " required to defend " + str(planet.PlanetID()) + " from incoming ")
   return required
 
 def DoTurn(pw):
@@ -250,6 +255,7 @@ def DoTurn(pw):
     defenseReq = max(DefenseRequiredForIncoming(pw, taker[0]), \
                        int(ceil(.50*GeneralDefenseRequired(pw, taker[0]))))
     surplus = taker[0].NumShips()
+    debug("surplus " + str(surplus))
     if defenseReq > 0:
       surplus -= defenseReq
     potTargets = []    
@@ -263,6 +269,12 @@ def DoTurn(pw):
     for potTarget in potTargets:
       needed = FleetRequiredToTake(pw, potTarget[0], \
                                     Distance(potTarget[0].PlanetID(), p.PlanetID()))
+      isenemy = False
+      if potTarget[0].Owner() == 2:
+        isenemy = True
+      debug("need " + str(needed) + " to take " + str(potTarget[0].PlanetID()) + " isenemy? " + str(isenemy))
+      
+        
       # take if we can
       if needed > 0 and surplus > needed:
         pw.IssueOrder(taker[0], potTarget[0], needed)
