@@ -65,7 +65,7 @@ class PlanetSim:
     currFleetSize = 0
     while left < 0:
       # May have to adjust increment to prevent timeout
-      currFleetSize += 1
+      currFleetSize += 2
       self.addFleet(turn, currFleetSize)
       left = self.simulate()        
       #debug("currfleet: " + str(currFleetSize) + " left: " + str(left))
@@ -264,12 +264,15 @@ def DoTurn(pw):
     # else, TODO: this planet is BONED until I fix
 
   # Maximize investments, Minimize enemy
-  targets = enemyPlanets+neutralPlanets
+  if winRatio >= 1.5:
+    debug("KILL KILL KILL!!!")
+    targets = enemyPlanets
+  else:
+    targets = enemyPlanets+neutralPlanets
   debug("Offense")
   for taker in myPlanets:
     debug(str(taker[0].PlanetID()))
-    defenseReq = max(DefenseRequiredForIncoming(pw, taker[0]), \
-                       int(ceil(.50*GeneralDefenseRequired(pw, taker[0]))))
+    defenseReq = DefenseRequiredForIncoming(pw, taker[0])
     surplus = taker[0].NumShips()
     debug("surplus " + str(surplus))
     if defenseReq > 0:
