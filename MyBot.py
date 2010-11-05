@@ -65,7 +65,7 @@ class PlanetSim:
     currFleetSize = 0
     while left < 0:
       # May have to adjust increment to prevent timeout
-      currFleetSize += 2
+      currFleetSize += 4
       self.addFleet(turn, currFleetSize)
       left = self.simulate()        
       #debug("currfleet: " + str(currFleetSize) + " left: " + str(left))
@@ -73,6 +73,35 @@ class PlanetSim:
     if left == 0:
         currFleetSize += 1
     return currFleetSize
+  def findMaxExpenditureWhileKeeping(self):
+    """ Assumes we own the planet in question """
+    # May have to adjust increment to prevent timeout
+    increment = 4
+    # what if we do nothing?  
+    left = self.simulate()
+    # we're gonna lose it, can't spend a dime
+    if left <= 0:
+      return 0
+    else:
+      startingShips = self.startingShips  
+      maxSpend = 0
+      while left > 0:
+        # can't spend more than you have
+        if maxSpend + increment >= startingShips:
+          break
+        maxSpend += increment
+        if startingShips <= increment:
+          break
+        self.startingShips -= maxSpend
+        left = self.simulate()
+        debug("left: " + str(left) + " spent: " + str(maxSpend))
+        # restore startingShips state
+        self.startingShips = startingShips
+      # check if we failed on last simulation
+      # if so, take 2 back
+      if left <= 0:
+        return maxSpend - increment
+      return maxSpend    
   def simulate(self):
     """After all fleets have come in, how many ships does the
     planet have?"""
@@ -99,6 +128,7 @@ class PlanetSim:
     neuShips = self.neutralShips
     for e in reducedFleets():
       remain = e[1]
+      #debug("fleetSize: " + str(remain))
       # Remove Neutrals if any
       if neuShips < 0:
         if abs(remain) >= abs(neuShips):
@@ -121,6 +151,7 @@ class PlanetSim:
         else:
           ships = ships - self.rate*turns + remain
       # Update turn
+      #debug("ships: " + str(ships))
       currTurn = e[0]      
     if neuShips:
       return neuShips
@@ -187,7 +218,7 @@ def DefenseRequiredForIncoming(pw, planet):
         sim.addFleet(f.TurnsRemaining(), -f.NumShips())
       else:
         sim.addFleet(f.TurnsRemaining(), f.NumShips())
-  required = sim.findMinFleetOwn(0)
+  required = planet.NumShips() - sim.findMaxExpenditureWhileKeeping()
 #  debug(str(required) + " required to defend " + str(planet.PlanetID()) + " from incoming ")
   return required
 
@@ -272,11 +303,12 @@ def DoTurn(pw):
   debug("Offense")
   for taker in myPlanets:
     debug(str(taker[0].PlanetID()))
-    defenseReq = DefenseRequiredForIncoming(pw, taker[0])
+    defenseReq = max(DefenseRequiredForIncoming(pw, taker[0]), \
+                     int(ceil(.10*GeneralDefenseRequired(pw, taker[0]))))
     surplus = taker[0].NumShips()
-    debug("surplus " + str(surplus))
     if defenseReq > 0:
       surplus -= defenseReq
+    debug("surplus " + str(surplus) + " defenseReq: " + str(defenseReq))
     potTargets = []    
     # Calculate investement risks for this taker
     for p in targets:
