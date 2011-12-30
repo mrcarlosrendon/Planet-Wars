@@ -1,3 +1,8 @@
+This is my bot from the Google AI Challenge, it ranked 1298 out of 4617. 
+To see it in action either run the command below or watch its tournament 
+matches at:
+http://planetwars.aichallenge.org/profile.php?user_id=10290
+
 java -jar tools/PlayGame.jar maps/map1.txt 200 200 log.txt "python MyBot.py" "java -jar example_bots/DualBot.jar" | java -jar tools/ShowGame.jar
 
 
